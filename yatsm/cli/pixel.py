@@ -15,7 +15,7 @@ import yaml
 from yatsm.algorithms import postprocess  # TODO: implement postprocessors
 from yatsm.cli import options, console
 from yatsm.config_parser import convert_config, parse_config_file
-from yatsm import _cyprep as cyprep
+from yatsm._cyprep import get_valid_mask
 from yatsm.utils import csvfile_to_dataframe, get_image_IDs
 from yatsm.reader import read_pixel_timeseries
 from yatsm.regression.transforms import harm  # noqa
@@ -109,9 +109,9 @@ def pixel(ctx, config, px, py, band, plot, ylim, style, cmap,
 
     # Mask out of range data
     idx_mask = cfg['dataset']['mask_band'] - 1
-    valid = cyprep.get_valid_mask(Y,
-                                  cfg['dataset']['min_values'],
-                                  cfg['dataset']['max_values']).astype(np.bool)
+    valid = get_valid_mask(Y,
+                           cfg['dataset']['min_values'],
+                           cfg['dataset']['max_values']).astype(np.bool)
     valid *= np.in1d(Y[idx_mask, :], cfg['dataset']['mask_values'],
                      invert=True).astype(np.bool)
 

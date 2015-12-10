@@ -2,11 +2,42 @@
 #
 # YATSM documentation build configuration file, created by
 # sphinx-quickstart on Tue Nov  4 18:26:04 2014.
-
 import sys
 import os
 
 import sphinx
+
+try:
+    from unittest import mock
+    from unittest.mock import MagicMock
+except:
+    import mock
+    from mock import MagicMock
+mock.FILTER_DIR = False
+
+
+MOCK_MODULES = [
+    'glmnet',
+    'matplotlib', 'matplotlib.pyplot', 'matplotlib.style',
+    'numpy', 'numpy.lib', 'numpy.lib.recfunctions', 'numpy.ma',
+    'numba',
+    'osgeo',
+    'palettable',
+    'pandas',
+    'patsy',
+    'rpy2', 'rpy2.robjects', 'rpy2.robjects.numpy2ri',
+    'rpy2.robjects.packages',
+    'scipy', 'scipy.stats',
+    'sklearn', 'sklearn.cross_validation', 'sklearn.ensemble',
+    'sklearn.linear_model',
+    'sklearn.externals', 'sklearn.externals.joblib',
+    'statsmodels', 'statsmodels.api',
+    'yatsm.accel', 'yatsm._cyprep',
+    'yatsm.classifiers', 'yatsm.classifiers.diagnostics',
+]
+for mod_name in MOCK_MODULES:
+    print 'Mocking %s' % mod_name
+    sys.modules[mod_name] = MagicMock()
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the

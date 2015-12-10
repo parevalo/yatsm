@@ -10,7 +10,7 @@ import patsy
 from yatsm.cache import test_cache
 from yatsm.cli import options
 from yatsm.config_parser import parse_config_file
-import yatsm._cyprep as cyprep
+from yatsm._cyprep import get_valid_mask
 from yatsm.errors import TSLengthException
 from yatsm.utils import (distribute_jobs, get_output_name, get_image_IDs,
                          csvfile_to_dataframe)
@@ -142,7 +142,7 @@ def line(ctx, config, job_number, total_jobs,
             _Y = Y.take(col, axis=2)
             # Mask
             idx_mask = cfg['dataset']['mask_band'] - 1
-            valid = cyprep.get_valid_mask(
+            valid = get_valid_mask(
                 _Y,
                 cfg['dataset']['min_values'],
                 cfg['dataset']['max_values']).astype(bool)

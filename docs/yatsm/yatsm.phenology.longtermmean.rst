@@ -1,7 +1,7 @@
-yatsm.regression.numba_accel module
+yatsm.phenology.longtermmean module
 ===================================
 
-.. automodule:: yatsm.regression.numba_accel
+.. automodule:: yatsm.phenology.longtermmean
     :members:
     :undoc-members:
     :show-inheritance:

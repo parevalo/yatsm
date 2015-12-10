@@ -5,7 +5,7 @@ using YATSM change detection.
 """
 import logging
 
-from sklearn.ensemble import RandomForestClassifier
+import sklearn.ensemble
 import yaml
 
 from ..errors import AlgorithmNotFoundException
@@ -13,7 +13,7 @@ from ..errors import AlgorithmNotFoundException
 logger = logging.getLogger('yatsm')
 
 _algorithms = {
-    'RandomForest': RandomForestClassifier
+    'RandomForest': sklearn.ensemble.RandomForestClassifier
 }
 
 

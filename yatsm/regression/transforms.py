@@ -5,7 +5,7 @@ TODO:
 
 """
 import numpy as np
-from patsy import stateful_transform
+import patsy
 
 
 class Harmonic(object):
@@ -36,4 +36,4 @@ class Harmonic(object):
         ]).T
 
 
-harm = stateful_transform(Harmonic)
+harm = patsy.stateful_transform(Harmonic)

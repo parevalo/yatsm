@@ -1,7 +1,7 @@
-yatsm.cli.segment module
+yatsm.cli.console module
 ========================
 
-.. automodule:: yatsm.cli.segment
+.. automodule:: yatsm.cli.console
     :members:
     :undoc-members:
     :show-inheritance:
