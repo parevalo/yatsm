@@ -190,6 +190,10 @@ class CCDCesque(YATSM):
         self.n_features = X.shape[1]
         self.n_series = Y.shape[0]
 
+        self.resid = np.empty((len(self.test_indices), 0))
+        self.rmse = np.empty((len(self.test_indices), 0))
+        self.r_std = np.empty((len(self.test_indices), 0))
+
         # Setup test indices
         if not np.any(np.asarray(self.test_indices)):
             self.test_indices = np.arange(self.n_series)
@@ -394,6 +398,7 @@ class CCDCesque(YATSM):
 
             self.trained_date = 0
             self.monitoring = False
+            return
 
         elif mag[0] > self.threshold and self.remove_noise:
             # Masking way of deleting is faster than `np.delete`
@@ -403,6 +408,18 @@ class CCDCesque(YATSM):
             self.Y = self.Y[:, m]
             self.dates = self.dates[m]
             self.here -= 1
+            return
+
+        # DELETEME
+        self.resid = np.append(self.resid, self.scores, axis=1)
+        self.rmse = np.append(self.rmse, _rmse[:, None], axis=1)
+        r_std = np.zeros((len(self.test_indices), 1))
+        for i, idx in enumerate(self.test_indices):
+            r_std[i, 0] = ((
+                self.Y[idx, self.start:self.here] -
+                self.models[idx].predict(self.X[self.start:self.here, :]))
+                .std())
+        self.r_std = np.append(self.r_std, r_std, axis=1)
 
 # MODEL FITTING UTILITIES
     def _update_model(self):

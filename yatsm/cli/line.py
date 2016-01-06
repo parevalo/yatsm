@@ -111,6 +111,11 @@ def line(ctx, config, job_number, total_jobs,
     if cfg['phenology']['enable']:
         md.update({'phenology': cfg['phenology']})
 
+    test_indices = len(cfg[cfg['YATSM']['algorithm']]['init']['test_indices'])
+    resid = np.empty((test_indices, 0))
+    rmse = np.empty((test_indices, 0))
+    r_std = np.empty((test_indices, 0))
+
     # Begin process
     start_time_all = time.time()
     for line in job_lines:
@@ -155,6 +160,11 @@ def line(ctx, config, job_number, total_jobs,
             if yatsm.record is None or len(yatsm.record) == 0:
                 continue
 
+            if len(yatsm) == 1:
+                resid = np.append(resid, yatsm.resid, axis=1)
+                rmse = np.append(rmse, yatsm.rmse, axis=1)
+                r_std = np.append(r_std, yatsm.r_std, axis=1)
+
             # Postprocess
             if cfg['YATSM'].get('commission_alpha'):
                 yatsm.record = postprocess.commission_test(
@@ -184,6 +194,12 @@ def line(ctx, config, job_number, total_jobs,
 
         run_time = time.time() - start_time
         logger.debug('Line %s took %ss to run' % (line, run_time))
+
+        print('Scaled residual diagnostics: ')
+        print('    mean ({} obs): {}'.format(resid.shape[1], resid.mean(axis=1)))
+        print('    std ({} obs): {}'.format(resid.shape[1], resid.std(axis=1)))
+        print('    mean r_std: {}'.format(r_std.mean(axis=1)))
+        print('    mean rmse: {}'.format(rmse.mean(axis=1)))
 
     logger.info('Completed {n} lines in {m} minutes'.format(
                 n=len(job_lines),
