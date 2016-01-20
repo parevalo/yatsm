@@ -4,6 +4,13 @@
 Classification
 ==============
 
-The issue tracker on Github is being used to track additions to this
-documentation section. Please see
-`ticket 38 <https://github.com/ceholden/yatsm/issues/38>`_.
+Maps of discrete land cover classes can be created using the following procedure:
+
+1. Train example model segments using :ref:`yatsm train <yatsm_train>`.
+2. Classify all of the model segments using :ref:`yatsm classify <yatsm_classify>`.
+3. Create a land cover map using :ref:`yatsm map <yatsm_map>`.
+
+Examples
+========
+
+
