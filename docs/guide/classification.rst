@@ -23,9 +23,16 @@ In this step, all of the records of the YATSM saved files are classified using t
 
 Mapping
 _______
-In this step, the information on land cover class that is now stored in the YATSM result files is used to generate a categorical map of these classes on a specific date.
+In this step, the information on land cover class that is now stored in the YATSM result files is used to generate a categorical map of these classes on a specific date. A probability map can also be created.
+
+
 
 Examples
 ========
 
+TODO
+====
+
+- Include ancillary information
+- (add other topics to potential roadmap)
 
