@@ -13,7 +13,7 @@ Maps of discrete land cover classes can be created using the following steps:
 Training
 _________
 
-In this step, a classifier from `scikit-learn`is trained on YATSM output and then saved to a file. The training data must be supplied as a raster file containing the land cover categories to be used. These must be collected over a time period where the observed land cover type remains stable. 
+In this step, a `scikit-learn` compatible classifier is trained on YATSM output and then saved to a file. The training data must be supplied as a raster file containing the land cover categories to be used. These must be collected over a time period where the observed land cover type remains stable. 
 
 Classification
 ______________
