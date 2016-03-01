@@ -4,6 +4,8 @@
 Classification
 ==============
 
+Rewrite in active voice
+
 Maps of discrete land cover classes can be created using the following steps:
 
 1. Train example model segments using :ref:`yatsm train <yatsm_train>`.
