@@ -46,11 +46,11 @@ Consider this example workflow:
         yatsm classify p013r030.yaml RandomForest.yaml $job $njob
     done
 
-3. Create a categorical land cover type map:
+3. Create a categorical land cover type map
 .. code-block:: bash
 
     $ yatsm map --root $ts_path/images --result $ts_path/Results --image $ts_path/images/example_img
-        class 2014-01-01 Class_20014-01-01.tif
+    $   class 2014-01-01 Class_20014-01-01.tif
 
 
 An example template of the parameter file is located within
@@ -63,6 +63,8 @@ An example of a classifier configuration file is located in
  ``examples/classifiers/RandomForest.yaml``:
 
 .. literalinclude:: ../../examples/classifiers/RandomForest.yaml
+   :language: yaml
+
 
 TODO
 ====
