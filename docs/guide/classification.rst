@@ -47,11 +47,11 @@ Consider this example workflow:
     done
 
 3. Create a categorical land cover type map
+
 .. code-block:: bash
 
     $ yatsm map --root $ts_path/images --result $ts_path/Results --image $ts_path/images/example_img
-    $   class 2014-01-01 Class_20014-01-01.tif
-
+       class 2014-01-01 Class_20014-01-01.tif
 
 An example template of the parameter file is located within
 ``examples/p013r030/p013r030.yaml``:
