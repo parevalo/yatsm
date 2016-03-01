@@ -1,0 +1,54 @@
+digraph G {
+    label = "Algorithm Flowchart:\nCCDCesque"
+    compound=true;
+    newrank=true;
+    ratio=1.5;
+    /*ranksep=1.0;*/
+
+    preprocess [label="preprocess" shape="box"];
+    fit [label="fit" shape="box"]
+    while [label="while\n(has observations)"];
+    trained [label="Segment\ninitialized?"];
+    end [label="Iterate\nforward"];
+    # Training
+    clean [label="Multitemp mask" shape="box"];
+    stable [label="Test\nStability"];
+    is_stable [label="Stable:\ninit segment"]
+    is_unstable [label="Unstable:\nmove forward"]
+    # Monitoring
+    monitor [label="Check next\nobservations"];
+    noise [label="Delete noise"]
+    change [label="Change:\nnew segment"]
+    nochange [label="No change"]
+
+    { rank=min;  preprocess; fit; while; }
+    { rank=same; trained; }
+    { rank=same; clean; monitor; }
+    { rank=max; end; }
+
+    preprocess -> fit -> while -> trained;
+    trained -> clean [label="No" lhead=cluster0];
+    trained -> monitor [label="Yes" lhead=cluster1];
+
+    subgraph cluster0 {
+        label="Historic Period";
+        clean -> stable;
+        stable -> is_stable [label="Yes"];
+        stable -> is_unstable [label="No"];
+    }
+    subgraph cluster1 {
+        label="Monitoring Period"
+        monitor -> noise [label="Noise\ndetected"];
+        monitor -> change [label="Above\nthreshold"];
+        monitor -> nochange [label="Within\nthreshold"];
+    }
+
+    noise -> end [ltail=cluster1];
+    change -> end [ltail=cluster1];
+    nochange -> end [ltail=cluster1];
+
+    is_stable -> end [ltail=cluster0];
+    is_unstable -> end [ltail=cluster0];
+    end -> while;
+
+}

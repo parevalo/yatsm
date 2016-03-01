@@ -1,4 +1,5 @@
 """ Command line interface for running YATSM on image lines """
+import copy
 import logging
 import os
 import time
@@ -6,21 +7,20 @@ import time
 import click
 import numpy as np
 
-from yatsm.cache import test_cache
-from yatsm.cli import options
-from yatsm.config_parser import parse_config_file
-from yatsm.errors import TSLengthException
-from yatsm.io.helpers import mkdir_p
-from yatsm.utils import (distribute_jobs, get_output_name, get_image_IDs,
-                         csvfile_to_dataframe)
-from yatsm.reader import get_image_attribute, read_line
-from yatsm.algorithms import postprocess
+from . import options
+from ..cache import test_cache
+from ..config_parser import parse_config_file
+from ..errors import TSLengthException
+from ..io import get_image_attribute, mkdir_p, read_line
+from ..utils import (distribute_jobs, get_output_name, get_image_IDs,
+                     csvfile_to_dataframe)
+from ..algorithms import postprocess
 try:
-    import yatsm.phenology.longtermmean as pheno
+    from ..phenology import longtermmean as pheno
 except ImportError as e:
     pheno = None
     pheno_exception = e.message
-from yatsm.version import __version__
+from ..version import __version__
 
 logger = logging.getLogger('yatsm')
 
@@ -104,12 +104,17 @@ def line(ctx, config, job_number, total_jobs,
         X = np.flipud(X)
 
     # Create output metadata to save
+    algo = cfg['YATSM']['algorithm']
     md = {
-        'YATSM': cfg['YATSM'],
-        cfg['YATSM']['algorithm']: cfg[cfg['YATSM']['algorithm']]
+        'YATSM': copy.deepcopy(cfg['YATSM']),
+        algo: copy.deepcopy(cfg[algo])
     }
     if cfg['phenology']['enable']:
         md.update({'phenology': cfg['phenology']})
+    # Remove all objects from metadata
+    # Pickled objects potentially unstable across library versions)
+    md['YATSM']['estimator'].pop('object', None)
+    md['YATSM']['refit'].pop('prediction_object', None)
 
     # Begin process
     start_time_all = time.time()

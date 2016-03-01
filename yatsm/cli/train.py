@@ -12,14 +12,11 @@ from osgeo import gdal
 from sklearn.cross_validation import KFold, StratifiedKFold
 from sklearn.externals import joblib
 
-from yatsm.cli import options
-from yatsm.config_parser import parse_config_file
-from yatsm import classifiers
-from yatsm.classifiers import diagnostics
-from yatsm.errors import TrainingDataException
-from yatsm import plots
-from yatsm import reader
-from yatsm import utils
+from . import options
+from ..config_parser import parse_config_file
+from ..classifiers import cfg_to_algorithm, diagnostics
+from ..errors import TrainingDataException
+from .. import io, plots, utils
 
 logger = logging.getLogger('yatsm')
 
@@ -65,7 +62,7 @@ def train(ctx, config, classifier_config, model, n_fold, seed,
 
     # Parse config & algorithm config
     cfg = parse_config_file(config)
-    algo, algo_cfg = classifiers.cfg_to_algorithm(classifier_config)
+    algo, algo_cfg = cfg_to_algorithm(classifier_config)
 
     training_image = cfg['classification']['training_image']
     if not training_image or not os.path.isfile(training_image):
@@ -199,7 +196,7 @@ def get_training_inputs(cfg, exit_on_missing=False):
 
     """
     # Find and parse training data
-    roi = reader.read_image(cfg['classification']['training_image'])
+    roi = io.read_image(cfg['classification']['training_image'])
     logger.debug('Read in training data')
     if len(roi) == 2:
         logger.info('Found labels for ROIs -- including in output')

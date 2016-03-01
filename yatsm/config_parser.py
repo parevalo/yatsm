@@ -20,7 +20,9 @@ def parse_config_file(config_file):
 
     Returns:
         dict: dict of sub-dicts, each sub-dict containing configuration keys
-            and values pertinent to a process or algorithm. Pickled `sklearn`
+            and values pertinent to a process or algorithm. Pickled
+            estimators compatible with ``scikit-learn``
+            (i.e., that follow :class:`sklearn.base.BaseEstimator`)
             models will be loaded and returned as an object within the dict
 
     Raises:
@@ -121,7 +123,7 @@ def _parse_YATSM_config(cfg):
         _find_pickle(pred_method, cfg))
     # Grab estimator fit options
     cfg['YATSM']['estimator']['fit'] = cfg.get(
-        pred_method, {}).get('fit', {})
+        pred_method, {}).get('fit', {}) or {}
 
     # Unpickle refit objects
     if cfg['YATSM'].get('refit', {}).get('prediction', None):
@@ -130,7 +132,7 @@ def _parse_YATSM_config(cfg):
         fitopts = []
         for pred_method in cfg['YATSM']['refit']['prediction']:
             pickles.append(_unpickle_predictor(_find_pickle(pred_method, cfg)))
-            fitopts.append(cfg.get(pred_method, {}).get('fit', {}))
+            fitopts.append(cfg.get(pred_method, {}).get('fit', {}) or {})
         cfg['YATSM']['refit']['prediction_object'] = pickles
         cfg['YATSM']['refit']['fit'] = fitopts
     # Fill in as empty refit
@@ -202,8 +204,8 @@ def expand_envvars(d):
     """ Recursively convert lookup that look like environment vars in a dict
 
     This function things that environmental variables are values that begin
-    with '$' and are evaluated with ``os.path.expandvars``. No exception will
-    be raised if an environment variable is not set.
+    with `$` and are evaluated with :func:`os.path.expandvars`. No exception
+    will be raised if an environment variable is not set.
 
     Args:
         d (dict): expand environment variables used in the values of this

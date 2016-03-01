@@ -2,11 +2,40 @@
 #
 # YATSM documentation build configuration file, created by
 # sphinx-quickstart on Tue Nov  4 18:26:04 2014.
-
+import datetime as dt
 import sys
 import os
 
 import sphinx
+
+try:
+    from unittest import mock
+    from unittest.mock import MagicMock
+except:
+    import mock
+    from mock import MagicMock
+mock.FILTER_DIR = False
+
+
+MOCK_MODULES = [
+    'glmnet',
+    'matplotlib', 'matplotlib.cm', 'matplotlib.pyplot', 'matplotlib.style',
+    'numpy', 'numpy.lib', 'numpy.lib.recfunctions', 'numpy.ma',
+    'numba',
+    'osgeo',
+    'pandas',
+    'patsy',
+    'rpy2', 'rpy2.robjects', 'rpy2.robjects.numpy2ri',
+    'rpy2.robjects.packages',
+    'scipy', 'scipy.ndimage', 'scipy.stats',
+    'sklearn', 'sklearn.cross_validation', 'sklearn.ensemble',
+    'sklearn.externals', 'sklearn.externals.joblib',
+    'sklearn.linear_model', 'sklearn.utils',
+    'statsmodels', 'statsmodels.api',
+    'yatsm._cyprep'
+]
+for mod_name in MOCK_MODULES:
+    sys.modules[mod_name] = MagicMock()
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -22,18 +51,44 @@ sys.path.insert(0, os.path.join(d(d(os.path.abspath(__file__))), 'scripts'))
 extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
+    'sphinx.ext.extlinks',
+    'sphinx.ext.graphviz',
+    'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
-    'sphinx.ext.graphviz',
     'sphinx.ext.todo',
-    'sphinxcontrib.bibtex'
+    'sphinxcontrib.bibtex',
+    'sphinx_paramlinks'
 ]
+autodoc_member_order = 'groupwise'
+extlinks = {
+    'issue': ('https://github.com/ceholden/yatsm/issues/%s', 'issue ')
+}
+intersphinx_mapping = {
+    'sklearn': ('http://scikit-learn.org/stable', None),
+    'numpy': ('http://docs.scipy.org/doc/numpy/', None),
+    'pandas': ('http://pandas.pydata.org/pandas-docs/stable/', None),
+    'python': ('https://docs.python.org/dev', None)
+}
+todo_include_todos = True
+graphviz_output_format = "svg"
+graphviz_dot_args = ['-Gratio="compress"']
+
+latex_elements = {
+    'preamble': r'''
+        \usepackage{amsmath}
+        \usepackage{bm}
+        \usepackage{color}
+    '''
+}
+
 # Napoleon extension moving to sphinx.ext.napoleon as of sphinx 1.3
 sphinx_version = sphinx.version_info
 if sphinx_version[0] >= 1 and sphinx_version[1] >= 3:
     extensions.append('sphinx.ext.napoleon')
 else:
     extensions.append('sphinxcontrib.napoleon')
+napoleon_use_ivar = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -46,7 +101,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'YATSM'
-copyright = u'2014 - 2015, Chris Holden'
+copyright = u'2014 - {}, Chris Holden'.format(dt.datetime.utcnow().year)
 
 import yatsm  # noqa
 version = yatsm.__version__
@@ -85,7 +140,7 @@ html_context = dict(
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+_path = ['static']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
