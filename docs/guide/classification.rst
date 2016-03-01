@@ -59,8 +59,8 @@ An example template of the parameter file is located within
 .. literalinclude:: ../../examples/p013r030/p013r030.yaml
    :language: yaml 
 
-An example of a classifier configuration file is located in
- ``examples/classifiers/RandomForest.yaml``:
+An example of a classifier configuration file is located within
+``examples/classifiers/RandomForest.yaml``:
 
 .. literalinclude:: ../../examples/classifiers/RandomForest.yaml
    :language: yaml
