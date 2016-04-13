@@ -149,10 +149,20 @@ def line(ctx, config, job_number, total_jobs,
             yatsm.px = col
             yatsm.py = line
 
+            #625, 5781
+            #if line != 630 or col != 4473:
+            #    continue
+            #
+            #
+            #import pdb; pdb.set_trace()  
+
             try:
                 yatsm.fit(_X, _Y, _dates, **algo_cfg.get('fit', {}))
             except TSLengthException:
                 continue
+            except Exception as exc:
+                logger.exception('Encountered error processing row/column: '
+                                 '{}/{}'.format(line, col))
 
             if yatsm.record is None or len(yatsm.record) == 0:
                 continue
@@ -167,9 +177,16 @@ def line(ctx, config, job_number, total_jobs,
                     cfg['YATSM']['refit']['prediction_object'],
                     cfg['YATSM']['refit']['stay_regularized'],
                     cfg['YATSM']['refit']['fit']):
-                yatsm.record = postprocess.refit_record(
-                    yatsm, prefix, estimator,
-                    fitopt=fitopt, keep_regularized=stay_reg)
+
+                try:    
+                    yatsm.record = postprocess.refit_record(
+                        yatsm, prefix, estimator,
+                        fitopt=fitopt, keep_regularized=stay_reg)
+
+                except ValueError:
+                    logger.debug('ValueError in commission test '
+                                 'in column {}, skipping'.format(col))
+                    continue             
 
             if cfg['phenology']['enable']:
                 pcfg = cfg['phenology']
