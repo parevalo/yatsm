@@ -153,6 +153,9 @@ def line(ctx, config, job_number, total_jobs,
                 yatsm.fit(_X, _Y, _dates, **algo_cfg.get('fit', {}))
             except TSLengthException:
                 continue
+            except Exception as exc:
+                logger.exception('Encountered error processing row/column: '
+                                 '{}/{}'.format(line, col))
 
             if yatsm.record is None or len(yatsm.record) == 0:
                 continue
