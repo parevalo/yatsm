@@ -161,19 +161,22 @@ class RLM(sklearn.base.BaseEstimator):
         self.coef_, resid = _weight_fit(X, y, numpy.ones_like(y))
         self.scale = self.scale_est(resid, c=self.scale_constant)
 
-        iteration = 1
-        converged = 0
-        while not converged and iteration < self.maxiter:
-            _coef = self.coef_.copy()
-            self.weights = self.M(resid / self.scale, c=self.tune)
-            self.coef_, resid = _weight_fit(X, y, self.weights)
-            if self.update_scale:
-                self.scale = max(EPS,
-                                 self.scale_est(resid, c=self.scale_constant))
-            iteration += 1
-            converged = _check_converge(self.coef_, _coef, tol=self.tol)
+        if self.scale < EPS:
+            return self
+        else:
+            iteration = 1
+            converged = 0
+            while not converged and iteration < self.maxiter:
+                _coef = self.coef_.copy()
+                self.weights = self.M(resid / self.scale, c=self.tune)
+                self.coef_, resid = _weight_fit(X, y, self.weights)
+                if self.update_scale:
+                    self.scale = max(EPS,
+                                     self.scale_est(resid, c=self.scale_constant))
+                iteration += 1
+                converged = _check_converge(self.coef_, _coef, tol=self.tol)
 
-        return self
+            return self
 
     def predict(self, X):
         """ Predict yhat using model

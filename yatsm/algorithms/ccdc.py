@@ -220,6 +220,7 @@ class CCDCesque(YATSM):
 
             while not self.monitoring and self.can_monitor:
                 self.train()
+                self._update_model()
                 self.here += 1
 
             while self.monitoring and self.can_monitor:
