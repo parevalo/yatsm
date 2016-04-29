@@ -220,6 +220,9 @@ class CCDCesque(YATSM):
 
             while not self.monitoring and self.can_monitor:
                 self.train()
+                # Ensure all bands in Y are fit in case we can't monitor
+                # after training
+                self._update_model()
                 self.here += 1
 
             while self.monitoring and self.can_monitor:
