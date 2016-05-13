@@ -218,7 +218,7 @@ class CCDCesque(YATSM):
 
         while self.running:
 
-            while not self.monitoring and self.can_monitor:
+            while not self.monitoring: # and self.can_monitor:
                 self.train()
                 self.here += 1
 
