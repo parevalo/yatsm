@@ -1,0 +1,113 @@
+# http://json-schema.org/example2.html
+"$schema": "http://json-schema.org/draft-04/schema#"
+description: YATSM configuration
+type: object
+properties:
+    version:
+        type: string
+        # TODO: pattern:
+    data:
+        "$ref": "#/definitions/data"
+
+definitions:
+    data:
+        type: object
+        properties:
+            cache_dir:
+                type: string
+                default: ''
+            datasets:
+                type: object
+                minProperties: 1
+                patternProperties:
+                    # Datasets can be labeled anything the user wants...
+                    '.*':
+                        "$ref": "#/definitions/datasets"
+        required:
+            - datasets
+        additionalProperties: False
+    datasets:
+        type: object
+        properties:
+            reader:
+                type: object
+                oneOf: [
+                    "$ref": "#/definitions/readers/reader/GDAL",
+                    "$ref": "#/definitions/readers/reader/AGDCv2"
+                ]
+            band_names:
+                type: array
+                uniqueItems: true
+                items:
+                    type: string
+            mask_band:
+                oneOf: [
+                    type: string,
+                    type: 'null'
+                ]
+                default: ''
+            mask_values:
+                oneOf: [
+                    "$ref": "#/types/array_num",
+                    type: 'null'
+                ]
+                default: []
+            min_values:
+                "$ref": "#/types/array_num"
+                default: []
+            max_values:
+                "$ref": "#/types/array_num"
+                default: []
+        required:
+            - reader
+            - band_names
+    readers:
+        GDAL:
+            type: object
+            properties:
+                input_file:
+                    type: string
+                date_format:
+                    type: string
+                keep_open:
+                    type: boolean
+                    default: True
+                column_dtype:
+                    type: object
+                    minProperties: 1
+                    patternProperties:
+                        '.*':
+                            type: string
+            required:
+                - input_file
+                - date_format
+        AGDCv2:
+            # TODO
+            type: string
+        reader:
+            GDAL:
+                properties:
+                    name:
+                        enum: ['GDAL']
+                    GDAL:
+                        "$ref": "#/definitions/readers/GDAL"
+                dependencies:
+                    name: ['GDAL']
+            AGDCv2:
+                properties:
+                    name:
+                        enum: ['AGDCv2']
+                    AGDCv2:
+                        "$ref": "#/definitions/readers/AGDCv2"
+                dependencies:
+                    name: ['AGDCv2']
+
+types:
+    array_num:
+        type: array
+        items:
+            type: number
+    array_str:
+        type: array
+        items:
+            type: string

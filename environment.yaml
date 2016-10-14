@@ -6,7 +6,7 @@ channels:
     - conda-forge
 dependencies:
     # Base
-    - python=2.7
+    - python
     - numpy>=1.9.0
     - scipy>=0.14.0
     - Cython>=0.20.1
@@ -15,16 +15,22 @@ dependencies:
     - scikit-learn>=0.15.1
     - pandas>=0.16.0
     - patsy>=0.3.0
-    # GDAL
-    - gdal>=2.0.0
+    # GDAL and IO
+    - fiona>=1.7.0
+    - gdal>=1.11
+    - rasterio>=0.36.0
+    - shapely>=1.5.16
+    - xarray>=0.7.1
+    - pytables>=3.2.0
     # CLI
     - click>=4.0
     # Config file
     - pyyaml>=3.11
+    - jsonschema>=2.5.1
     # Plotting
     - matplotlib>=1.4.2
     # Accelerated functions w/ numba (OPTIONAL)
-    - numba>=0.22.0
+    - numba>=0.27.0
     # Python interface to R (OPTIONAL)
     - rpy2>=2.5.6
     - pip:
@@ -33,3 +39,5 @@ dependencies:
         # Required but missing from conda
         - palettable>=2.0.0
         - click_plugins>=1.0
+        - decorator>=4.0.10
+        - toposort>=1.4

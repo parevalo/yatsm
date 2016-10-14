@@ -17,6 +17,8 @@ if os.environ.get('TRAVIS'):
 import numpy as np  # noqa
 import pandas as pd  # noqa
 import pytest  # noqa
+from sklearn.ensemble import RandomForestClassifier
+import sklearn.externals.joblib as jl
 import yaml  # noqa
 
 
@@ -29,6 +31,17 @@ yaml_config = os.path.join(here, 'data', 'p035r032_config.yaml')
 
 example_classify_config = 'RandomForest.yaml'
 example_classify_pickle = 'train_rf.pkl'
+
+
+def make_example_classifier(filename):
+    # Create a dummy RF model for train/classify testing
+    rf = RandomForestClassifier()
+    p, n_class = 42, 2
+    n = n_class * 5
+    X = np.random.rand(n, p)
+    y = np.repeat(range(n_class), n / n_class)
+    rf.fit(X, y)
+    jl.dump(rf, filename)
 
 
 # EXAMPLE DATASETS
@@ -101,6 +114,9 @@ def example_results(request, tmpdir):
         'classify_config': os.path.join(dst, example_classify_config),
         'example_classify_pickle': os.path.join(dst, example_classify_pickle)
     }
+
+    make_example_classifier(results['example_classify_pickle'])
+
     return results
 
 
@@ -126,19 +142,19 @@ def mkdir_permissions(request):
     """ Fixture for creating dir with specific read/write permissions """
     def make_mkdir(read=False, write=False):
         if read and write:
-            mode = 0755
+            mode = 0o755
         elif read and not write:
-            mode = 0555
+            mode = 0o555
         elif not read and write:
-            mode = 0333
+            mode = 0o333
         elif not read and not write:
-            mode = 0000
+            mode = 0o000
 
         path = mkdtemp()
         os.chmod(path, mode)
 
         def fin():
-            os.chmod(path, 0755)
+            os.chmod(path, 0o755)
             os.removedirs(path)
         request.addfinalizer(fin)
 

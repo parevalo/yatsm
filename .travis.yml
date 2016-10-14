@@ -1,8 +1,5 @@
 language: python
 sudo: false
-cache:
-    directories:
-        - $HOME/conda/pkgs
 python:
     - "2.7"
 branches:
@@ -14,19 +11,25 @@ addons:
         packages:
             - gfortran
 before_install:
-    - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+    - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+          wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
+      else
+          wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+      fi
     - bash miniconda.sh -b -p $HOME/miniconda
     - export PATH=$HOME/miniconda/bin:$PATH
     - conda config --set always_yes yes --set changeps1 no --set show_channel_urls yes
-    # Update conda
-    - conda update --yes conda
+    - conda config --add channels conda-forge
+    - conda update -q conda
+    - conda info -a
 install:
+    # Edit in the correct Python version into environment.yaml
+    - sed -i "s/- python/- python=${TRAVIS_PYTHON_VERSION}/g" environment.yaml
     # Create conda matching requirements
-    - conda env create -n test python=$TRAVIS_PYTHON_VERSION -f environment.yaml
+    - conda env create -n test -f environment.yaml
     - source activate test
     # Rest of dependencies
-    - "pip install -r requirements/dev.txt"
-    - "pip install pytest"
+    - "pip install -r tests/requirements.txt"
     # Install YATSM
     - "pip install -e ."
 script:
@@ -35,9 +38,21 @@ script:
     # See: http://stackoverflow.com/questions/26875191/analyzing-coverage-of-numba-wrapped-functions
     - NUMBA_DISABLE_JIT=1 coverage run --source yatsm -m py.test
 after_success:
+    # Report coverage
     - pip install coveralls
     - coverage report
     - coveralls
+    # Docs
+    - source activate test
+    - pip install -r docs/requirements-docs.txt
+    - sphinx-apidoc -f -e -o docs/source/yatsm yatsm/
+    - bash docs/scripts/deploy-to-gh-pages.sh
 before_cache:
     # Deactivate conda so we use system 'curl'
     - source deactivate
+env:
+    global:
+        - GITHUB_REPO: "github.com/ceholden/yatsm.git"
+        - secure: "BIxnx7nv/1LY1hHVbcytI2xwm5ZmhGoAQe/c9yJ5DuXZ3iU+U4unVKPXSdrICGkRJqt1X/bT+D7W6Ig4UoaKdZ2/GpUi1C822yvefQiJ3E7otk5u0L/ApvP8UVPM0GbX0rqQM6eiet6xyE1rTR7q1cwgCrs10JjmlUArX1uXPcc="
+notifications:
+    email: false

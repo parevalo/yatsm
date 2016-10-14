@@ -183,9 +183,7 @@ class CCDCesque(YATSM):
             dates (numpy.ndarray): ordinal dates for each observation in X/Y
 
         Returns:
-            numpy.ndarray: NumPy structured array containing timeseries
-                model attribute information
-
+            CCDCesque: Returns ``self``
         """
         if len(dates) != X.shape[0] or len(dates) != Y.shape[1]:
             raise ValueError('X/Y/dates must have same number of observations')
@@ -223,7 +221,9 @@ class CCDCesque(YATSM):
                 self.here += 1
 
             # Ensure all bands are fit in case we can't monitor
-            self._update_model()
+            # First check if there are enough obs to estimate model
+            if self.span_index > self.n_features:
+                self._update_model()
 
             while self.monitoring and self.can_monitor:
                 # Update model if required
@@ -251,7 +251,7 @@ class CCDCesque(YATSM):
         if not self.monitoring:
             self.record = self.record[:-1]
 
-        return self.record
+        return self
 
     def reset(self):
         """ Reset state information required for model fittings
