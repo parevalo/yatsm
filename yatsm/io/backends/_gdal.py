@@ -80,12 +80,12 @@ class GDALTimeSeries(object):
         self._init_attrs_from_file(self.df['filename'][0])
 
     def _init_attrs_from_file(self, filename):
-        with rasterio.drivers():
+        with rasterio.Env():
             with rasterio.open(filename, 'r') as src:
                 #: dict: rasterio metadata of first file
                 self.md = src.meta.copy()
                 self.crs = src.crs
-                self.affine = src.affine
+                self.transform = src.transform
                 self.res = src.res
                 self.ul = src.ul(0, 0)
                 self.height = src.height
@@ -114,34 +114,38 @@ class GDALTimeSeries(object):
         """
         if self.keep_open:
             if not hasattr(self, '_src_open'):
-                with rasterio.drivers():
+                with rasterio.Env():
                     self._src_open = [rasterio.open(f, 'r') for
                                       f in self.df['filename']]
             for _src in self._src_open:
                 yield _src
         else:
-            with rasterio.drivers():
+            with rasterio.Env():
                 for f in self.df['filename']:
                     yield rasterio.open(f, 'r')
 
     def read(self, window=None, out=None):
         """ Read time series, usually inside of a specified window
 
+        .. todo::
+
+            Allow reading of a subset of bands (make like ``rasterio``)
+
         Args:
             window (tuple): A pair (tuple) of pairs of ints specifying
                 the start and stop indices of the window rows and columns
             out (np.ndarray): A NumPy array of pre-allocated memory to read
-                the time series into. Its shape should be:
+                the time series into. Its shape should be::
 
-                (time series length, # bands, # rows, columns)
+                (len(observations), len(bands), len(rows), len(columns))
 
         Returns:
             np.ndarray: A NumPy array containing the time series data
         """
         # Parse geographic/projected coordinates from window query
         ((row_min, row_max), (col_min, col_max)) = window
-        x_min, y_min = (col_min, row_max) * self.affine
-        x_max, y_max = (col_max, row_min) * self.affine
+        x_min, y_min = (col_min, row_max) * self.transform
+        x_max, y_max = (col_max, row_min) * self.transform
         coord_bounds = (x_min, y_min, x_max, y_max)
 
         shape = (self.length, self.count,
@@ -170,13 +174,13 @@ class GDALTimeSeries(object):
             name (str): Name of the xr.DataArray
             band_names (list[str]): Names of bands to use for xarray.DataArray
             out (np.ndarray): A NumPy array of pre-allocated memory to read
-                the time series into. Its shape should be:
+                the time series into. Its shape should be::
 
-                (time series length, # bands, # rows, columns)
+                ((len(observations), len(bands), len(rows), len(columns))
 
         Returns:
             xarray.DataArray: A DataArray containing the time series data with
-                coordinate dimenisons (time, band, y, and x)
+            coordinate dimenisons (time, band, y, and x)
 
         Raises:
             IndexError: if `band_names` is specified but is not the same length
@@ -204,7 +208,7 @@ class GDALTimeSeries(object):
 
         da.attrs['crs'] = self.crs.to_string()
         da.attrs['crs_wkt'] = self.crs.wkt
-        da.attrs['affine'] = self.affine
+        da.attrs['transform'] = self.transform
         da.attrs['rs'] = self.res
         da.attrs['nodata'] = self.nodatavals
 
@@ -219,7 +223,7 @@ class GDALTimeSeries(object):
 
         Returns:
             xarray.Dataset: A Dataset containing the time series metadata
-                with coordinate dimenisons (time)
+            with coordinate dimenisons (time)
 
         """
         if not items:

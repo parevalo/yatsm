@@ -15,21 +15,16 @@ from scipy import stats
 from scipy.stats import norm
 import xarray as xr
 
-from _recresid import _recresid
+from ._core import pandas_like, StructuralBreakResult
 from ..accel import try_jit
+from ..regression._recresid import _recresid
 
 logger = logging.getLogger(__name__)
 
 pnorm = norm.cdf
 
-pandas_like = (pd.DataFrame, pd.Series, xr.DataArray)
 
 # OLS-CUSUM
-
-# tuple: CUSUM-OLS results
-CUSUMOLSResult = namedtuple('CUSUMOLSResult', ['index', 'score', 'process',
-                                               'pvalue', 'signif'])
-
 # dict: CUSUM OLS critical values
 CUSUM_OLS_CRIT = {
     0.01: 1.63,
@@ -55,20 +50,26 @@ def _cusum_OLS(X, y):
 
     process = _cusum(resid, p)
     _process = np.abs(process)
-    score = _process.max()
     idx = _process.argmax()
+    score = _process[idx]
 
     return process, score, idx
 
 
 def cusum_OLS(X, y, alpha=0.05):
-    u""" OLS-CUSUM test for structural breaks
+    ur""" OLS-CUSUM test for structural breaks
 
     Tested against R's ``strucchange`` package and is faster than
     the equivalent function in the ``statsmodels`` Python package when
     Numba is installed.
 
-    # TODO: same function for cusum_REC?
+    The OLS-CUSUM test statistic, based on a single OLS regression, is defined
+    as:
+
+    .. math::
+
+        W_n^0(t) = \frac{1}{\hat{\sigma}\sqrt{n}}
+                   \sum_{i=1}^{n}{\hat{\mu_i}}
 
     Args:
         X (array like): 2D (n_obs x n_features) design matrix
@@ -77,9 +78,11 @@ def cusum_OLS(X, y, alpha=0.05):
             Ploberger and Krämer (1992)
 
     Returns:
-        CUSUMOLSResult: A named tuple include the the change point (index of
-            ``y``), the test ``score`` and ``pvalue``, and a boolean testing
-            if the CUSUM score is significant at the given ``alpha``
+        StructuralBreakResult: A named tuple include the the test name,
+        change point (index of ``y``), the test ``score`` and ``pvalue``,
+        and a boolean testing if the CUSUM score is
+        significant at the given ``alpha``
+
     """
     _X = X.values if isinstance(X, pandas_like) else X
     _y = y.values.ravel() if isinstance(y, pandas_like) else y.ravel()
@@ -98,17 +101,16 @@ def cusum_OLS(X, y, alpha=0.05):
     crit = CUSUM_OLS_CRIT[alpha]
     pval = stats.kstwobign.sf(score)
 
-    return CUSUMOLSResult(index=idx, score=score, process=process,
-                          pvalue=pval, signif=score > crit)
+    return StructuralBreakResult(method='OLS-CUSUM',
+                                 index=idx,
+                                 score=score,
+                                 process=process,
+                                 boundary=crit,
+                                 pvalue=pval,
+                                 signif=score > crit)
 
 
 # REC-CUSUM
-#: tuple: Recursive CUSUM results
-CUSUMRecursiveResult = namedtuple('CUSUMRecursiveResult',
-                                  ['index', 'score', 'process', 'pvalue',
-                                   'signif'])
-
-
 def _brownian_motion_pvalue(x, k):
     """ Return pvalue for some given test statistic """
     # TODO: Make generic, add "type='Brownian Motion'"?
@@ -160,17 +162,40 @@ def _cusum_rec_sctest(x):
 
 
 def cusum_recursive(X, y, alpha=0.05):
-    u""" Rec-CUSUM test for structural breaks
+    ur""" Rec-CUSUM test for structural breaks
 
     Tested against R's ``strucchange`` package.
 
-    Critical values for this test statistic are taken from:
+    The REC-CUSUM test, based on the recursive residuals, is defined as:
+
+    .. math::
+
+        W_n(t) = \frac{1}{\tilde{\sigma}\sqrt{n}}
+                 \sum_{i=k+1}^{k+(n-k)}{\tilde{\mu_i}}
+
+
+    Critical values for this test statistic are taken from::
 
         A. Zeileis. p values and alternative boundaries for CUSUM tests.
             Working Paper 78, SFB "Adaptive Information Systems and Modelling
             in Economics and Management Science", December 2000b.
+
+    Args:
+        X (array like): 2D (n_obs x n_features) design matrix
+        y (array like): 1D (n_obs) indepdent variable
+        alpha (float): Test threshold
+
+    Returns:
+        StructuralBreakResult: A named tuple include the the test name,
+        change point (index of ``y``), the test ``score`` and ``pvalue``,
+        and a boolean testing if the CUSUM score is
+        significant at the given ``alpha``
+
     """
-    process = _cusum_rec_efp(X, y)
+    _X = X.values if isinstance(X, pandas_like) else X
+    _y = y.values.ravel() if isinstance(y, pandas_like) else y.ravel()
+
+    process = _cusum_rec_efp(_X, _y)
     stat = _cusum_rec_sctest(process)
     stat_pvalue = _brownian_motion_pvalue(stat, 1)
 
@@ -189,12 +214,12 @@ def cusum_recursive(X, y, alpha=0.05):
             index = y.to_series().index
             idx = index[idx]
         process = pd.Series(data=process, index=index, name='REC-CUSUM')
+        boundary = pd.Series(data=boundary, index=index, name='Boundary')
 
-
-    # TODO: pandas this up
-    # TODO: think about making some functions public
-    return CUSUMRecursiveResult(process=process,
-                                index=idx,
-                                pvalue=stat_pvalue,
-                                score=stat,
-                                signif=stat_pvalue < pvalue_crit)
+    return StructuralBreakResult(method='REC-CUSUM',
+                                 process=process,
+                                 boundary=boundary,
+                                 index=idx,
+                                 pvalue=stat_pvalue,
+                                 score=stat,
+                                 signif=stat_pvalue < pvalue_crit)
