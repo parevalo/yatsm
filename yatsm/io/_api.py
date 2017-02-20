@@ -1,6 +1,7 @@
 """ Functions, classes, etc. useful to CLI or other users
 """
 from collections import OrderedDict
+import datetime as dt
 import logging
 
 import six
@@ -66,7 +67,8 @@ def get_reader(name=None, **kwargs):
     if not reader_cls:
         raise KeyError('Unknown time series reader "{}"'.format(name))
 
-    return reader_cls(**kwargs)
+    if hasattr(reader_cls, 'from_config'):
+        return reader_cls.from_config(**kwargs)
 
 
 def read_and_preprocess(config, readers, window, out=None):
@@ -95,7 +97,7 @@ def read_and_preprocess(config, readers, window, out=None):
         drivers for the requested ``window``
     """
     datasets = {}
-    for name, cfg in six.iteritems(config):
+    for name, cfg in config.items():
         reader = readers[name]
         arr = reader.read_dataarray(window=window,
                                     band_names=cfg['band_names'],
@@ -117,4 +119,8 @@ def read_and_preprocess(config, readers, window, out=None):
 
         datasets[name] = ds
 
-    return merge_data(datasets)
+    ds = merge_data(datasets)
+    ds['doy'] = ('time', ds['time.dayofyear'])
+    ds['ordinal'] = ('time', ds['time'].to_pandas().map(dt.datetime.toordinal))
+
+    return ds

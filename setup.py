@@ -1,67 +1,14 @@
 import logging
 import os
-import shutil
 import sys
 
-from distutils.command.clean import clean as _clean
-from setuptools.command.install import install as _install
-from setuptools.command.develop import develop as _develop
 from setuptools import find_packages, setup
-from setuptools.extension import Extension
+
+PY2 = sys.version_info[0] == 2
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger()
 
-
-def _build_pickles():
-    # Build pickles
-    here = os.path.dirname(__file__)
-    sys.path.append(os.path.join(here, 'yatsm', 'regression', 'pickles'))
-    from yatsm.regression.pickles import serialize as serialize_pickles  # noqa
-    serialize_pickles.make_pickles()
-
-
-# Extra cleaning with MyClean
-class my_clean(_clean):
-    description = 'Remove files generated during build process'
-
-    def run(self):
-        _clean.run(self)
-        if os.path.exists('build'):
-            shutil.rmtree('build')
-        for dirpath, dirnames, filenames in os.walk('yatsm'):
-            for filename in filenames:
-                if any(filename.endswith(suffix) for suffix in
-                       ('.c', '.so', '.pyd', '.pyc')):
-                    os.unlink(os.path.join(dirpath, filename))
-                    continue
-                if (any(filename.endswith(suffix) for suffix in
-                        ('.pkl', '.json')) and
-                        os.path.basename(dirpath) == 'pickles'):
-                    os.unlink(os.path.join(dirpath, filename))
-            for dirname in dirnames:
-                if dirname == '__pycache__':
-                    shutil.rmtree(os.path.join(dirpath, dirname))
-
-
-# Create pickles when building
-class my_install(_install):
-    def run(self):
-        self.execute(_build_pickles, [], msg='Building estimator pickles')
-        _install.run(self)
-
-
-class my_develop(_develop):
-    def run(self):
-        self.execute(_build_pickles, [], msg='Building estimator pickles')
-        _develop.run(self)
-
-
-cmdclass = {
-    'clean': my_clean,  # python setup.py clean
-    'install': my_install,  # call when pip install
-    'develop': my_develop  # called when pip install -e
-}
 
 # Get version
 with open('yatsm/version.py') as f:
@@ -72,74 +19,49 @@ with open('yatsm/version.py') as f:
             version = version.strip("'")
             continue
 
+
 # Get README
 with open('README.rst') as f:
     readme = f.read()
 
+
 # Installation requirements
-install_requires = [
-    'future',
-    'six',
-    'numpy',
-    'scipy',
-    'Cython',
-    'statsmodels',
-    'scikit-learn',
-    'pandas',
-    'patsy',
-    'fiona',
-    'GDAL',
-    'shapely',
-    'xarray',
-    'tables',
-    'dask',
-    'click',
-    'click_plugins',
-    'pyyaml',
-    'jsonschema',
-    'tables',
-    'decorator',
-    'toposort',
-    'matplotlib',
-]
+extras_require = {
+    'core': [
+        'future', 'six',
+        'numpy', 'pandas',
+        'scipy',
+        'matplotlib',
+        'scikit-learn',
+        'statsmodels',  # TODO: reevaluate need
+        'patsy',
+        'rasterio',
+        'fiona',
+        'shapely',
+        'xarray',
+        'tables',
+        'click',
+        'click_plugins',
+        'cligj',
+        'pyyaml',
+        'jsonschema'
+    ],
+    'pipeline': ['dask', 'distributed', 'toposort', 'graphviz']
+}
+if PY2:
+    extras_require['pipeline'].extend(['futures'])
+extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
 
-# NumPy/Cython build setup
-include_dirs = []
-extra_compile_args = ['-O3']
-
-try:
-    import numpy as np
-    include_dirs.append(np.get_include())
-except ImportError:
-    log.critical('NumPy and its headers are required for YATSM. '
-                 'Please install and try again.')
-    sys.exit(1)
-
-try:
-    from Cython.Build import cythonize
-except ImportError:
-    log.critical('Cython is required for YATSM. Please install and try again')
-    sys.exit(1)
-
-ext_opts = dict(
-    include_dirs=include_dirs,
-    extra_compile_args=extra_compile_args
-)
-cy_ext_modules = cythonize([
-    Extension('yatsm._cyprep', ['yatsm/_cyprep.pyx'], **ext_opts)
-])
 
 # Pre-packaged regression algorithms included in installation
 package_data = {
     'yatsm': [
-        os.path.join('regression', 'pickles', 'pickles.json'),
-        os.path.join('regression', 'pickles', '*.pkl'),
         os.path.join('config', 'config_schema.yaml')
     ]
 }
 
 # Setup
-packages = find_packages(exclude=['tests', 'yatsm.regression.pickles'])
+packages = find_packages(exclude=['tests'])
 packages.sort()
 
 entry_points = '''
@@ -157,6 +79,12 @@ entry_points = '''
 
     [yatsm.algorithms.change]
     CCDCesque=yatsm.algorithms.ccdc:CCDCesque
+
+    [yatsm.pipeline.tasks.tasks]
+    norm_diff = yatsm.pipeline.tasks.preprocess:norm_diff
+
+    [yatsm.pipeline.tasks.segment]
+    pixel_CCDCesque = yatsm.pipeline.tasks.change:pixel_CCDCesque
 '''
 
 
@@ -177,8 +105,7 @@ setup_dict = dict(
     description=desc,
     zip_safe=False,
     long_description=readme,
-    ext_modules=cy_ext_modules,
-    install_requires=install_requires,
-    cmdclass=cmdclass
+    install_requires=extras_require['core'],
+    extras_require=extras_require,
 )
 setup(**setup_dict)

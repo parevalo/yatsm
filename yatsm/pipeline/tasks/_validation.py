@@ -62,13 +62,15 @@ output specifications are required.
 from collections import Iterable
 import functools
 import inspect
+import logging
 
 import decorator
-import future.utils
+import six
 
-from .language import OUTPUT, REQUIRE, DATA, RECORD
-from ..errors import PipelineConfigurationError as PCError
+from yatsm.pipeline.language import PIPE_CONTENTS, REQUIRE, OUTPUT, STASH
+from yatsm.errors import PipelineConfigurationError as PCError
 
+logger = logging.getLogger(__name__)
 
 REQUIRED_BY_DEFAULT = True
 
@@ -80,8 +82,23 @@ def eager_task(func):
     return func
 
 
+def version(version_str):
+    def decorator(func):
+        func.version = version_str
+        return func
+    return decorator
+
+
 def _parse_signature(signature, req_len=None):
     """ Parse a signature for basic validity and structure
+
+    Example:
+
+    .. code-block:: python
+
+        >>> (True, [str, str])  # two required arguments
+        >>> [str, str]  # two arguments, required by default
+        >>> (False, [str, str])  # two optional arguments
 
     Args:
         signature (iterable): One or more objects in a ``list``, or a
@@ -97,19 +114,31 @@ def _parse_signature(signature, req_len=None):
         KeyError: If ``name`` isn't a supported type of function signature
         TypeError: If ``signature`` is invalid
     """
-    # Given as <str:name>=[<object>, ...]
-    if isinstance(signature, list):
-        signature = (REQUIRED_BY_DEFAULT, signature)
+    def _has_required(l):
+        return l and isinstance(l[0], bool)
 
-    # Given as <str:name>=(<bool:required>, [<object>, ...]])
-    if (isinstance(signature, tuple) and len(signature) == 2 and
-          isinstance(signature[0], bool) and isinstance(signature[1], list)):
-        if req_len and len(signature[1]) != req_len:
-            raise PCError("Function signature must have {n} arguments"
-                          .format(n=req_len))
-        return signature
-    else:
-        raise PCError("Invalid signature: {sig}".format(sig=signature))
+    def _check(l):
+        return (
+            isinstance(l, (tuple, list, )) and
+            len(l) == 2 and
+            isinstance(l[0], bool) and
+            isinstance(l[1], (tuple, list, ))
+        )
+
+    if isinstance(signature, (tuple, list, )):
+        # Given as <str:name>=[<object>, ...]
+        if not _has_required(signature):
+            signature = (REQUIRED_BY_DEFAULT, signature)
+        # Given as <str:name>=(<bool:required>, [<object>, ...]])
+        try:
+            okay = _check(signature)
+        except Exception as exc:
+            logger.exception('Invalid signature {0}'.format(signature), exc)
+            raise
+        else:
+            if okay:  # and fall if not
+                return signature
+    raise PCError("Invalid signature: {sig}".format(sig=signature))
 
 
 def _validate_specification(spec, signature):
@@ -122,7 +151,8 @@ def _validate_specification(spec, signature):
                            .format(name))
         elif name in spec:
             value = spec[name]
-            # If the specification description has a specific length requirement
+            # If the specification description has a specific length
+            # requirement
             if isinstance(desc, Iterable):
                 if desc and len(value) != len(desc):
                     raise ValueError(
@@ -134,6 +164,15 @@ def _validate_specification(spec, signature):
 def check(name, **signature):
     """ Validate inputs to argument `name`
 
+    Example:
+
+    .. code-block:: python
+
+        # required, by default, see `REQUIRED_BY_DEFAULT`
+        @check('var', data=[str, str])
+        # not required, explicitly
+        @check('var', data=(False, [str, str]))
+
     Args:
         name (str): Name of argument (this argument should expect a `dict`)
         signature (dict): Keyword arguments gathered
@@ -141,29 +180,24 @@ def check(name, **signature):
     Raises:
         PipelineConfigurationError: Raise if function use doesn't match
             required signature. Note that this error is a subclass of TypeError
-
     """
     # Allow:
     #   1) Explicit "required": `check('x', data=(False, [str]))`
-    #   2) Assume default (not required): `check('x', data=[str])`
-    for k, sig in signature.items():
-        if k not in (DATA, RECORD):
-            raise PCError(
-                'Unknown signature check for argument named "{name}"'
-                .format(name=k))
-        req_len = 1 if name == OUTPUT and k == RECORD else None
+    #   2) Assume default (required): `check('x', data=[str])`
+    for key, sig in signature.items():
+        if key not in PIPE_CONTENTS:
+            raise PCError('Unknown argument "{0}" to check'.format(key))
         try:
-            signature[k] = _parse_signature(sig, req_len=req_len)
-        except PCError as pce:
-            future.utils.raise_with_traceback(PCError(
-                "'{}' signature, '{}', is invalid: {}".format(k, sig, pce)
-            ))
+            signature[key] = _parse_signature(sig)
+        except Exception as exc:
+            logger.exception('Invalid signature: {0}'.format(sig), exc)
+            six.raise_from(PCError('Invalid signature: {0}'.format(sig)), exc)
 
     @decorator.decorator
     def wrapper(func, *args, **kwargs):
         arg_names, va_args, va_kwargs, _ = inspect.getargspec(func)
         if name not in arg_names:
-            raise PCError("Argument specified, '{}', does not match "
+            raise PCError("Arg specified, '{0}', does not match "
                           "function call signature".format(name))
         arg_idx = arg_names.index(name)
         arg = args[arg_idx]
@@ -171,9 +205,10 @@ def check(name, **signature):
         try:
             _validate_specification(arg, signature)
         except Exception as exc:
-            future.utils.raise_with_traceback(PCError(
-                "Argument '{}' to '{}' is invalid:: {}: {}"
-                .format(name, func.__name__, exc.__class__.__name__, exc)))
+            logger.exception('Arg "{0}" to "{1.__name__}" is invalid'
+                             .format(name, func), exc)
+            six.raise_from(PCError('Arg "{0}" to "{1.__name__}" is invalid'
+                                   .format(name, func)), exc)
         return func(*args, **kwargs)
 
     return wrapper
@@ -183,3 +218,5 @@ def check(name, **signature):
 outputs = functools.partial(check, OUTPUT)
 #: Decorator to check inputs to `require` argument
 requires = functools.partial(check, REQUIRE)
+#: Decorator to check inputs to `stash` argument
+stash = functools.partial(check, STASH)

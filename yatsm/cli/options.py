@@ -1,8 +1,13 @@
 """ YATSM command line interface """
 from datetime import datetime as dt
+import functools
 import os
 
 import click
+import cligj
+from future.utils import raise_with_traceback
+
+from yatsm.executor import get_executor, EXECUTOR_DEFAULTS, EXECUTOR_TYPES
 
 
 # CLI VALIDATORS
@@ -25,144 +30,6 @@ def valid_int_gt_zero(ctx, param, value):
         return _validator(param, value)
 
 
-# CLI ARGUMENTS
-arg_config_file = click.argument(
-    'configfile',
-    nargs=1,
-    type=click.Path(exists=True, readable=True,
-                    dir_okay=False, resolve_path=True),
-    metavar='<config>')
-
-
-arg_output = click.argument(
-    'output',
-    metavar='<output>',
-    type=click.Path(writable=True, dir_okay=False,
-                    resolve_path=True))
-
-
-arg_total_jobs = click.argument(
-    'total_jobs',
-    nargs=1,
-    type=click.INT,
-    metavar='<total_jobs>')
-
-
-def arg_date(var='date', metavar='<date>', date_frmt_key='date_frmt'):
-    def _arg_date(f):
-        def callback(ctx, param, value):
-            try:
-                value = dt.strptime(value, ctx.params[date_frmt_key])
-            except KeyError:
-                raise click.ClickException(
-                    'Need to use `date_format_opt` when using `date_arg`')
-            except ValueError:
-                raise click.BadParameter(
-                    'Cannot parse {v} to date with format {f}'.format(
-                        v=value, f=ctx.params['date_frmt']))
-            else:
-                return value
-        return click.argument(var, metavar=metavar, callback=callback)(f)
-    return _arg_date
-
-
-def arg_job_number(f):
-    def callback(ctx, param, value):
-        try:
-            value = int(value)
-        except:
-            raise click.BadParameter('Must specify an integer >= 0')
-
-        if value < 0:
-            raise click.BadParameter('Must specify an integer >= 0')
-        elif value == 0:
-            return value
-        else:
-            return value - 1
-
-    return click.argument('job_number', nargs=1, callback=callback,
-                          metavar='<job_number>')(f)
-
-
-# CLI OPTIONS
-opt_date_format = click.option(
-    '--date', 'date_frmt',
-    default='%Y-%m-%d',
-    metavar='<format>',
-    show_default=True,
-    is_eager=True,
-    help='Input date format')
-
-
-opt_format = click.option(
-    '-f', '--format', 'gdal_frmt',
-    default='GTiff',
-    metavar='<driver>',
-    show_default=True,
-    help='Output format driver')
-
-
-opt_nodata = click.option(
-    '--ndv', metavar='<NoDataValue>', type=float, default=-9999,
-    show_default=True, help='Output NoDataValue')
-
-
-opt_rootdir = click.option(
-    '--root',
-    default='./',
-    metavar='<directory>',
-    help='Root timeseries directory',
-    show_default=True,
-    type=click.Path(exists=True, file_okay=False,
-                    readable=True, resolve_path=True))
-
-
-def opt_exampleimg(f):
-    def callback(ctx, param, value):
-        # Check if file qualifies alone
-        if os.path.isfile(value):
-            _value = value
-        else:
-            # Check if path relative to root qualifies
-            _value = os.path.join(ctx.params['root'], value)
-            if not os.path.isfile(_value):
-                raise click.BadParameter('Cannot find example image '
-                                         '"{f}"'.format(f=value))
-            if not os.access(_value, os.R_OK):
-                raise click.BadParameter('Found example image but cannot '
-                                         'read from "{f}"'.format(f=_value))
-        return os.path.abspath(_value)
-    return click.option('--image', '-i',
-                        default='example_img',
-                        metavar='<image>',
-                        show_default=True,
-                        help='Example timeseries image',
-                        callback=callback)(f)
-
-
-def opt_resultdir(f):
-    def callback(ctx, param, value):
-        # Check if path qualifies alone
-        if os.path.isdir(value):
-            _value = value
-        else:
-            # Check if path relative to root qualifies
-            _value = os.path.join(ctx.params['root'], value)
-            if not os.path.isdir(_value):
-                raise click.BadParameter('Cannot find result directory '
-                                         '"{d}"'.format(d=value))
-        if not os.access(_value, os.R_OK):
-            raise click.BadParameter('Found result directory but cannot '
-                                     'read from "{d}"'.format(d=_value))
-        return os.path.abspath(_value)
-    return click.option('--result', '-r',
-                        default='YATSM',
-                        metavar='<directory>',
-                        show_default=True,
-                        help='Directory of results',
-                        callback=callback)(f)
-
-
 # CALLBACKS
 def callback_dict(ctx, param, value):
     """ Call back for dict style arguments (e.g., KEY=VALUE)
@@ -180,3 +47,189 @@ def callback_dict(ctx, param, value):
                 k, v = val.split('=', 1)
                 d[k] = v
         return d
+
+
+def callback_nodata(ctx, param, value):
+    """ Nodata handling
+    """
+    if not value or value.lower() in ('none', 'null', 'no', 'na', 'nan'):
+        return None
+    else:
+        try:
+            return float(value)
+        except:
+            raise click.BadParameter('{!r} is not a number'.format(value),
+                                      param=param, param_hint='nodata')
+
+
+# ARGUMENTS
+def _callback_arg_config(ctx, param, value):
+    from .._core import Config
+    try:
+        config = Config.from_file(value)
+    except Exception as exc:
+        click.BadParameter('Cannot parse config file %s' % value)
+        raise
+    else:
+        return config
+
+
+def _arg_date(name, date_format_key='date_format', **kwds):
+    def _arg_date(f):
+        def callback(ctx, param, value):
+            try:
+                value = dt.strptime(value, ctx.params[date_format_key])
+            except KeyError:
+                raise click.ClickException(
+                    'Need to use `date_format_opt` when using `date_arg`')
+            except ValueError:
+                raise click.BadParameter(
+                    'Cannot parse {v} to date with format {f}'.format(
+                        v=value, f=ctx.params['date_format']))
+            else:
+                return value
+        return click.argument(name, callback=callback, **kwds)(f)
+    return _arg_date
+
+
+def arg_job_number(f):
+    def callback(ctx, param, value):
+        try:
+            value = int(value)
+        except:
+            raise click.BadParameter('Must specify an integer >= 0')
+
+        if value < 0:
+            raise click.BadParameter('Must specify an integer >= 0')
+        elif value == 0:
+            return value
+        else:
+            return value - 1
+
+    return click.argument('job_number', nargs=1, callback=callback)(f)
+
+
+arg_config = click.argument(
+    'config',
+    nargs=1,
+    type=click.Path(exists=True, readable=True,
+                    dir_okay=False, resolve_path=True),
+    callback=_callback_arg_config)
+
+
+arg_output = click.argument(
+    'output',
+    type=click.Path(writable=True, dir_okay=False,
+                    resolve_path=True))
+
+
+arg_total_jobs = click.argument(
+    'total_jobs',
+    nargs=1,
+    type=click.INT)
+
+
+arg_date = _arg_date('date', date_format_key='date_format')
+arg_start_date = _arg_date('start_date', date_format_key='date_format')
+arg_end_date = _arg_date('end_date', date_format_key='date_format')
+
+
+# OPTIONS
+opt_date_format = click.option(
+    '--date_format', '--dformat', 'date_format',
+    default='%Y-%m-%d',
+    show_default=True,
+    is_eager=True,
+    help='Input date format')
+
+
+opt_format = click.option(
+    '-f', '--format', '--driver',
+    default='GTiff', show_default=True,
+    help="Output format driver")
+
+
+opt_creation_options = click.option(
+    '--co', '--profile', 'creation_options',
+    metavar='NAME=VALUE',
+    multiple=True,
+    callback=callback_dict,
+    show_default=True,
+    help="Driver specific creation options."
+         "See the documentation for the selected output driver for "
+         "more information.")
+
+
+opt_force_overwrite = click.option(
+    '--force-overwrite', 'force_overwrite',
+    is_flag=True, type=bool, default=False, show_default=True,
+    help="Always overwrite an existing output file.")
+
+
+opt_nodata = click.option(
+    '--nodata', callback=callback_nodata,
+    default='-9999', show_default=True,
+    metavar='NUMBER|nan', help="Set a Nodata value.")
+
+
+# COMBINED DECORATOR SHORTCUTS
+def _combined_decorations(func, optargs=None):
+    optargs = optargs or []
+
+    new_func = func
+    for f in optargs:
+        new_func = f(new_func)
+
+    @functools.wraps(new_func)
+    def decorator(*args, **kwargs):
+        return new_func(*args, **kwargs)
+
+    return decorator
+
+
+# TODO: --bounds, --like, etc?
+#: tuple: Collection of optional arguments used in map scripts
+opts_mapping = (
+    click.pass_context,  # ctx
+    opt_force_overwrite,  # force_overwrite
+    opt_format,  # driver
+    opt_nodata,  # nodata
+    opt_creation_options,  # co
+)
+
+
+#: callable: Decorator that combines all Click options from :ref:`opts_mapping`
+mapping_decorations = functools.partial(_combined_decorations,
+                                        optargs=opts_mapping)
+
+
+# SEGMENT HANDLING
+
+# Use segment after DATE
+opt_after = click.option('--after', is_flag=True,
+                         help='Use time segment after DATE if needed for map')
+
+
+# Use segment before DATE
+opt_before = click.option('--before', is_flag=True,
+                          help='Use time segment before DATE if needed for map')
+
+
+# Output QA/QC band?
+opt_qa_band = click.option('--qa', is_flag=True,
+                           help='Add QA band identifying segment type')
+
+
+# EXECUTOR
+opt_executor = click.option(
+    '--executor',
+    default=(EXECUTOR_TYPES[0], None), show_default=True,
+    type=(click.Choice(EXECUTOR_TYPES), str),
+    help='Pipeline executor (e.g., {})'.format(
+            ', '.join(['"%s %s"' % (k, v) for k, v
+            in EXECUTOR_DEFAULTS.items()
+        ])
+    ),
+    callback=lambda ctx, param, value: get_executor(*value)
+)
+

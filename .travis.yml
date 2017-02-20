@@ -11,6 +11,7 @@ addons:
         packages:
             - gfortran
 before_install:
+    # Install conda
     - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
           wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
       else
@@ -29,10 +30,13 @@ install:
     # Create conda matching requirements
     - conda env create -n test -f environment.yaml
     - source activate test
+    - pip install rpy2  # temp fix for broken ICU with conda-forge & r channels
     # Rest of dependencies
     - "pip install -r tests/requirements.txt"
     # Install YATSM
     - "pip install -e ."
+    # Info
+    - conda env export
 script:
     - py.test -ra tests/
     # Disable numba JIT for coverage to correctly identify JIT-ed lines
@@ -43,8 +47,10 @@ after_success:
     - pip install coveralls
     - coverage report
     - coveralls
+after_script:
     # Docs
     - source activate test
+    - conda install python-graphviz
     - pip install -r docs/requirements-docs.txt
     - sphinx-apidoc -f -e -o docs/source/yatsm yatsm/
     - bash docs/scripts/deploy-to-gh-pages.sh
@@ -53,7 +59,8 @@ before_cache:
     - source deactivate
 env:
     global:
-        - GITHUB_REPO: "github.com/ceholden/yatsm.git"
-        - secure: "BIxnx7nv/1LY1hHVbcytI2xwm5ZmhGoAQe/c9yJ5DuXZ3iU+U4unVKPXSdrICGkRJqt1X/bT+D7W6Ig4UoaKdZ2/GpUi1C822yvefQiJ3E7otk5u0L/ApvP8UVPM0GbX0rqQM6eiet6xyE1rTR7q1cwgCrs10JjmlUArX1uXPcc="
+        - ENCRYPTION_LABEL: "f7129f342355"
+        - COMMIT_AUTHOR_EMAIL: "ceholden@gmail.com"
+        - COMMIT_AUTHOR_NAME: "Chris Holden"
 notifications:
     email: false

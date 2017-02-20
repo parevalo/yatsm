@@ -7,6 +7,7 @@ import os
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.coords import BoundingBox
 import xarray as xr
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,12 @@ def parse_dataset_file(input_file, date_format, column_dtype=None):
     Returns:
         pd.DataFrame: Dataset information
     """
-    dt_parser = lambda x: pd.datetime.strptime(x, date_format)
+    def _parser(x):
+        return pd.datetime.strptime(x, date_format)
 
     df = pd.read_csv(input_file,
-                     parse_dates=['date'], date_parser=dt_parser,
+                     parse_dates=['date'],
+                     date_parser=_parser,
                      dtype=column_dtype)
     df.set_index('date', inplace=True, drop=False)
     df.index.name = 'time'
@@ -49,35 +52,45 @@ class GDALTimeSeries(object):
         df (pd.DataFrame): A Pandas dataframe describing time series. Requires
             keys 'filename' and 'date' be column names. Additional columns
             will be used as metadata available via ``get_metadata``.
-        input_file (str): If ``df`` is not specified, read time series dataset
-            information from this file
-        date_format (str): If ``df`` is not specified, parse date column in
-            ``input_file`` with this date string format
-        column_dtype (dict[str, str]): Datatype format parsing options for
-            all or subset of ``df`` columns passed as ``dtype`` argument to
-            ``pandas.read_csv``.
         keep_open (bool): Keep ``rasterio`` file descriptors open once opened?
 
+    Raises:
+        TypeError: If the ``df`` is not a :ref:`pd.DataFrame`
+        KeyError: If the ``df`` does not contain "date" and "filename" keys
     """
-    def __init__(self, df=None, input_file='', date_format='%Y%m%d',
-                 column_dtype=None,
-                 keep_open=False, **kwargs):
-        if isinstance(df, pd.DataFrame):
-            if not all([k in df.keys() for k in ('date', 'filename')]):
-                raise KeyError('pd.DataFrame passed should contain "date" and '
-                               '"filename" keys')
-            self.df = df
-        elif input_file and date_format:
-            self.df = parse_dataset_file(input_file, date_format, column_dtype)
-        else:
-            raise ValueError('Must specify either a pd.DataFrame or both'
-                             '"input_file" and "date_format" arguments')
+    def __init__(self, df, keep_open=False):
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError('Must provide a pandas.DataFrame')
+        if not all([k in df.keys() for k in ('date', 'filename')]):
+            raise KeyError('pd.DataFrame passed should contain "date" and '
+                           '"filename" keys')
+        self.df = df
         self.keep_open = keep_open
 
         # Determine if input file has extra metadata
         self.extra_md = self.df.columns.difference(['date', 'filename'])
-
         self._init_attrs_from_file(self.df['filename'][0])
+
+    @classmethod
+    def from_config(cls, input_file, date_format='%Y%m%d', column_dtype=None,
+                    **kwds):
+        """ Init time series dataset from file, as used by config
+
+        Args:
+            input_file (str): Filename of file containing time series
+                information to parse using :ref:`pandas.read_csv`
+            date_format (str): If ``df`` is not specified, parse date column in
+                ``input_file`` with this date string format
+            column_dtype (dict[str, str]): Datatype format parsing options for
+                all or subset of ``df`` columns passed as ``dtype`` argument to
+                ``pandas.read_csv``.
+            **kwds (dict): Options to pass to ``__init__``
+
+        """
+        df = parse_dataset_file(input_file,
+                                date_format=date_format,
+                                column_dtype=column_dtype)
+        return cls(df, **kwds)
 
     def _init_attrs_from_file(self, filename):
         with rasterio.Env():
@@ -86,10 +99,12 @@ class GDALTimeSeries(object):
                 self.md = src.meta.copy()
                 self.crs = src.crs
                 self.transform = src.transform
+                self.bounds = src.bounds
                 self.res = src.res
                 self.ul = src.ul(0, 0)
                 self.height = src.height
                 self.width = src.width
+                self.shape = src.shape
                 self.count = src.count
                 self.length = len(self.df)
                 self.block_windows = list(src.block_windows())
@@ -114,13 +129,13 @@ class GDALTimeSeries(object):
         """
         if self.keep_open:
             if not hasattr(self, '_src_open'):
-                with rasterio.Env():
+                with rasterio.Env():  # TODO: pass options
                     self._src_open = [rasterio.open(f, 'r') for
                                       f in self.df['filename']]
             for _src in self._src_open:
                 yield _src
         else:
-            with rasterio.Env():
+            with rasterio.Env():  # TODO: pass options
                 for f in self.df['filename']:
                     yield rasterio.open(f, 'r')
 
@@ -184,7 +199,7 @@ class GDALTimeSeries(object):
 
         Raises:
             IndexError: if `band_names` is specified but is not the same length
-                as the number of bands, `self.count`
+            as the number of bands, `self.count`
         """
         if not band_names:
             pad = len(str(self.count))
@@ -234,13 +249,28 @@ class GDALTimeSeries(object):
         """ Return Y/X coordinates of a raster to pass to xarray
 
         Args:
-            window (tuple): Window to read from ((ymin, ymax), (xmin, xmax)) in
-                pixel space
+            window (tuple): Window ((ymin, ymax), (xmin, xmax)) in pixel space
 
         Returns:
             tuple (np.ndarray, np.ndarray): Y and X coordinates for window
         """
-        coord_y = self.ul[0] + self.res[0] * np.arange(*window[0])
-        coord_x = self.ul[1] + self.res[1] * np.arange(*window[1])
+        x0, y0 = self.ul[0], self.ul[1]
+        nx, ny = window[1][1] - window[1][0], window[0][1] - window[0][0]
+        dx, dy = self.res[0], -self.res[1]
+
+        coord_x = np.linspace(start=x0, num=nx, stop=(x0 + (nx - 1) * dx))
+        coord_y = np.linspace(start=y0, num=ny, stop=(y0 + (ny - 1) * dy))
 
         return (coord_y, coord_x)
+
+    def window_bounds(self, window):
+        """ Return coordinate bounds of a given window
+
+        Args:
+            window (tuple): Window ((ymin, ymax), (xmin, xmax)) in pixel space
+
+        Returns:
+            BoundingBox: Window left, bottom, right, top (x_min, y_min, x_max,
+            y_max)
+        """
+        return BoundingBox(*rasterio.windows.bounds(window, self.transform))

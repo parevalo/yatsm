@@ -1,18 +1,39 @@
-""" Build pipeline dependency graph from requirements
+""" Build pipeline dependency graph from requirement configuration
+
+Requirement configurations for a task are organized into a set of
+"requires" and "outputs". These commponents are further categorized into
+groups based on the type of object, either raster "data", table-like "record",
+and generic Python "cache" objects.
+
+For example, a classifier task using the NIR and Red bands, described in
+YAML format:
+
+.. code-block:: yaml
+
+    require:
+        data: [nir, red]
+        cache: [classifier]
+    output:
+        data: [labels]
+
 """
 from collections import defaultdict
 import logging
 
-import six
 import toposort
 
-from .language import OUTPUT, REQUIRE, PIPE
+from yatsm.pipeline.language import (
+    PIPE_CONTENTS,
+    OUTPUT,
+    REQUIRE,
+    PIPE
+)
 
 logger = logging.getLogger(__name__)
 
 
-def format_deps(d):
-    """ Return formatted list of dependencies from 'requires'/'provides'
+def _format_deps(d):
+    """ Return formatted list of task OUTPUT or REQUIRE
 
     Transform as follows:
 
@@ -21,46 +42,44 @@ def format_deps(d):
         >>> d = {
             'data': ['red', 'nir', 'ndvi'],
             'record': ['ccdc'],
-        }
-        >>> format_deps(d)
-        ['data-red', 'data-nir', 'data-ndvi', 'record-ccdc']
+            'cache': ['rf']
+        }  # example :ref:`REQUIRE`
+        >>> _format_deps(d)
+        ['data-red', 'data-nir', 'data-ndvi', 'record-ccdc', 'cache-rf']
 
     Args:
-        d (dict): Task specification, requirements or provisions
+        d (dict): Task specification (e.g., requirements or outputs) for
+            a given type (the key) and the specification (a list of str)
 
     Returns:
-        list: Formatted names of task dependencies
+        list[str]: Formatted names of task dependencies
     """
     out = []
-    for _type, names in six.iteritems(d):
+    for _type, names in d.items():
         out.extend(['%s-%s' % (_type, name) for name in names])
     return out
 
 
-def pipe_deps(pipe):
+def _pipe_deps(pipe):
     """ Format data and record in a `pipe`
 
     Provides references to dataset bands and record information in `pipe`.
 
     Args:
-        pipe (dict): A "pipeline" object containing `data` and `record` as
-            keys.
+        pipe (yatsm.pipeline.Pipe): Pipeline data
 
     Returns:
         dict: Dependency graph for data or results inside of `pipe`
     """
-    dsk = {PIPE: set()}
-    deps = {
-        'data': pipe['data'].keys(),
-        'record': pipe['record'].keys()
-    }
-    _deps = format_deps(deps)
-    for _dep in _deps:
-        dsk[_dep] = set([PIPE])
+    dsk = {PIPE: set()}  # no dependencies for pipe item
+    deps = _format_deps(dict((item, pipe[item].keys())
+                             for item in PIPE_CONTENTS))
+    for dep in deps:
+        dsk[dep] = set([PIPE])
     return dsk
 
 
-def config_to_deps(config, dsk=None, overwrite=True):
+def _config_to_deps(config, dsk=None, overwrite=True):
     """ Convert a pipeline specification into list of tasks
 
     Args:
@@ -77,11 +96,11 @@ def config_to_deps(config, dsk=None, overwrite=True):
 
     for task, spec in config.items():
         # Add in task requirements
-        deps = format_deps(spec[REQUIRE])
+        deps = _format_deps(spec[REQUIRE])
         dsk[task] = dsk[task].union(deps)
 
-        # Add in data/record provided by task
-        prov = format_deps(spec[OUTPUT])
+        # Add in items provided by task
+        prov = _format_deps(spec[OUTPUT])
         task_needed = False
         for _prov in prov:
             if overwrite or _prov not in dsk:
@@ -119,10 +138,8 @@ def validate_dependencies(tasks, dsk):
         check = [dep in dsk for dep in deps]
         if not all(check):
             missing = [dep for dep, ok in zip(deps, check) if not ok]
-            missing_str = ', '.join(['%i) "%s"' % (i + 1, m) for i, m in
-                                     enumerate(missing)])
-            raise KeyError('Task "{}" has unmet dependencies: {}'
-                           .format(task, missing_str))
+            raise KeyError('Task "{0}" has {1} unmet dependencies: {2}'
+                           .format(task, len(missing), ', '.join(missing)))
     return tasks
 
 
@@ -131,7 +148,7 @@ def config_to_tasks(config, pipe, overwrite=True):
 
     Args:
         config (dict): Pipeline specification
-        pipe (dict): Container storing `data` and `record` keys
+        pipe (yatsm.pipeline.Pipe): Container storing `data` and `record` keys
         overwrite (bool): Allow tasks to overwrite values that have already
             been computed
 
@@ -139,8 +156,7 @@ def config_to_tasks(config, pipe, overwrite=True):
         list: Tasks to run from the pipeline specification, given in the
             order required to fullfill all dependencies
     """
-    _dsk = pipe_deps(pipe)
-    dsk = config_to_deps(config, dsk=_dsk, overwrite=overwrite)
+    dsk = _config_to_deps(config, dsk=_pipe_deps(pipe), overwrite=overwrite)
 
     tasks = [task for task in toposort.toposort_flatten(dsk)
              if task in config.keys()]
