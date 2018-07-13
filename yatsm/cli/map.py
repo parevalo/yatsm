@@ -49,8 +49,10 @@ logger = logging.getLogger('yatsm')
 @click.option('--amplitude', is_flag=True,
               help='Export amplitude of sin/cosine pairs instead of '
                    'individual coefficient estimates')
-@click.option('--predict-proba', 'predict_proba', is_flag=True,
-              help='Include prediction probability band (scaled by 10,000)')
+@click.option('--predict-proba', 'predict_proba', 
+              type=click.Choice(['none', 'max', 'all']),
+              help="Include prediction probability band (scaled by 10,000) "
+                   "for mapped class only ('max') or all classes ('all')")
 @click.pass_context
 def map(ctx, map_type, date, output,
         root, result, image, date_frmt, ndv, gdal_frmt, warn_on_empty,

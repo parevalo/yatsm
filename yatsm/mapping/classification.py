@@ -12,7 +12,7 @@ logger = logging.getLogger('yatsm')
 
 def get_classification(date, result_location, image_ds,
                        after=False, before=False, qa=False,
-                       pred_proba=False,
+                       pred_proba='none',
                        ndv=0, pattern='yatsm_r*', warn_on_empty=False):
     """ Output raster with classification results
 
@@ -26,8 +26,10 @@ def get_classification(date, result_location, image_ds,
             previous non-disturbed time segment
         qa (bool, optional): Add QA flag specifying segment type (intersect,
             after, or before)
-        pred_proba (bool, optional): Include additional band with
-            classification value probabilities
+        pred_proba (string, optional): Include additional band(s) with
+            classification value probabilities. Options are 'none' for no
+            probabilities, 'max' for the probability associated with the
+            assigned map label and 'all' for all class probabilities.
         ndv (int, optional): NoDataValue
         pattern (str, optional): filename pattern of saved record results
         warn_on_empty (bool, optional): Log warning if result contained no
@@ -40,13 +42,29 @@ def get_classification(date, result_location, image_ds,
     """
     # Find results
     records = find_results(result_location, pattern)
-
-    n_bands = 2 if pred_proba else 1
-    dtype = np.uint16 if pred_proba else np.uint8
-
     band_names = ['Classification']
-    if pred_proba:
+    dtype = np.uint16
+    
+    if pred_proba == 'none':
+        n_bands = 1
+        dtype = np.uint8
+    elif pred_proba == 'max':
+        n_bands = 2
         band_names.append('Pred Proba (x10,000)')
+    elif pred_proba == 'all':
+        for r in records:
+            _r = np.load(r)
+            if 'classes' not in _r.keys():
+                continue
+            else:
+                classes = _r['classes']
+                break
+        n_bands = classes.size + 1
+        bnames = ['Pred Proba Class {} (x10,000)'.format(i) for i in classes] 
+        band_names += bnames    
+    else:
+        raise ValueError('Must select a valid option for prediction probability.'
+                         "Options are: 'none', 'max' and 'all'")
     if qa:
         n_bands += 1
         band_names.append('SegmentQAQC')
@@ -62,7 +80,7 @@ def get_classification(date, result_location, image_ds,
             logger.warning('Results in {f} do not have classification labels'
                            .format(f=fname))
             continue
-        if 'class_proba' not in rec.dtype.names and pred_proba:
+        if 'class_proba' not in rec.dtype.names and pred_proba != 'none':
             raise ValueError('Results do not have classification prediction'
                              ' probability values')
 
@@ -72,10 +90,14 @@ def get_classification(date, result_location, image_ds,
 
             raster[rec['py'][index],
                    rec['px'][index], 0] = rec['class'][index]
-            if pred_proba:
+            if pred_proba == 'max':
                 raster[rec['py'][index],
                        rec['px'][index], 1] = \
                     rec['class_proba'][index].max(axis=1) * 10000
+            if pred_proba == 'all':
+                raster[rec['py'][index],
+                       rec['px'][index], 1:classes.size+1] = \
+                    rec['class_proba'][index] * 10000
             if qa:
                 raster[rec['py'][index], rec['px'][index], -1] = _qa
 
