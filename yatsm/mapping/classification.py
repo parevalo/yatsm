@@ -29,7 +29,9 @@ def get_classification(date, result_location, image_ds,
         pred_proba (string, optional): Include additional band(s) with
             classification value probabilities. Options are 'none' for no
             probabilities, 'max' for the probability associated with the
-            assigned map label and 'all' for all class probabilities.
+            assigned map label, 'all' for all class probabilities and "diff'
+            for the labels and probabilities of the first and second most
+            likely classes, as well as the difference in ther probabilities.
         ndv (int, optional): NoDataValue
         pattern (str, optional): filename pattern of saved record results
         warn_on_empty (bool, optional): Log warning if result contained no
@@ -45,6 +47,15 @@ def get_classification(date, result_location, image_ds,
     band_names = ['Classification']
     dtype = np.uint16
     
+    # Get all possible classes. Required for 'all' and 'diff' pred-proba options
+    for r in records:
+        _r = np.load(r)
+        if 'classes' not in _r.keys():
+            continue
+        else:
+            classes = _r['classes']
+            break
+
     if pred_proba == 'none':
         n_bands = 1
         dtype = np.uint8
@@ -52,19 +63,16 @@ def get_classification(date, result_location, image_ds,
         n_bands = 2
         band_names.append('Pred Proba (x10,000)')
     elif pred_proba == 'all':
-        for r in records:
-            _r = np.load(r)
-            if 'classes' not in _r.keys():
-                continue
-            else:
-                classes = _r['classes']
-                break
         n_bands = classes.size + 1
         bnames = ['Pred Proba Class {} (x10,000)'.format(i) for i in classes] 
         band_names += bnames    
+    elif pred_proba == 'diff':
+        n_bands = 5
+        band_names = ["Classes Set 1", "Set 1 proba", 
+                      "Classes Set 2", "Set 2 proba", 'proba_diff']
     else:
         raise ValueError('Must select a valid option for prediction probability.'
-                         "Options are: 'none', 'max' and 'all'")
+                         "Options are: 'none', 'max', 'all' and 'diff'")
     if qa:
         n_bands += 1
         band_names.append('SegmentQAQC')
@@ -96,8 +104,22 @@ def get_classification(date, result_location, image_ds,
                     rec['class_proba'][index].max(axis=1) * 10000
             if pred_proba == 'all':
                 raster[rec['py'][index],
-                       rec['px'][index], 1:classes.size+1] = \
+                       rec['px'][index], 1:] = \
                     rec['class_proba'][index] * 10000
+            if pred_proba == 'diff':
+                set1_proba = rec['class_proba'][index].max(axis=1) * 10000
+                set2_proba = np.partition(rec['class_proba'][index], -2)[:, -2]
+                set2_ind = np.zeros(index.shape[0], dtype=np.uint16)
+                #import pdb; pdb.set_trace()
+                for i in range(index.shape[0]):
+                    set2_ind[i] = np.where(rec['class_proba'][index[i]] == set2_proba[i])[0][0]
+                set2_class = classes[set2_ind]
+                set_diff = set1_proba - set2_proba
+                sets_array = np.stack([set1_proba, set2_class, set2_proba * 10000, 
+                                       set_diff], axis=-1)
+                raster[rec['py'][index],
+                    rec['px'][index], 1:] = sets_array 
+
             if qa:
                 raster[rec['py'][index], rec['px'][index], -1] = _qa
 
