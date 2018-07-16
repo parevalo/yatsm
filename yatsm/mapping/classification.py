@@ -110,12 +110,12 @@ def get_classification(date, result_location, image_ds,
                 set1_proba = rec['class_proba'][index].max(axis=1) * 10000
                 set2_proba = np.partition(rec['class_proba'][index], -2)[:, -2]
                 set2_ind = np.zeros(index.shape[0], dtype=np.uint16)
-                #import pdb; pdb.set_trace()
                 for i in range(index.shape[0]):
                     set2_ind[i] = np.where(rec['class_proba'][index[i]] == set2_proba[i])[0][0]
+                set2_proba *= 10000
                 set2_class = classes[set2_ind]
                 set_diff = set1_proba - set2_proba
-                sets_array = np.stack([set1_proba, set2_class, set2_proba * 10000, 
+                sets_array = np.stack([set1_proba, set2_class, set2_proba, 
                                        set_diff], axis=-1)
                 raster[rec['py'][index],
                     rec['px'][index], 1:] = sets_array 
