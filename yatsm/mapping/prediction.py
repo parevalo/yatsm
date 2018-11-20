@@ -129,7 +129,8 @@ def get_coefficients(date, result_location, image_ds,
 def get_prediction(date, result_location, image_ds,
                    bands='all', prefix='',
                    after=False, before=False, qa=False,
-                   ndv=-9999, pattern='yatsm_r*', warn_on_empty=False):
+                   ndv=-9999, pattern='yatsm_r*', warn_on_empty=False, 
+                   predict_mode='normal'):
     """ Output a raster with the predictions from model fit for a given date
 
     Args:
@@ -149,6 +150,10 @@ def get_prediction(date, result_location, image_ds,
         pattern (str, optional): filename pattern of saved record results
         warn_on_empty (bool, optional): Log warning if result contained no
             result records (default: False)
+        mode (str, optional): Use normal model to calculate predictions 
+            (i.e. for the given date) or use the 'endpoints' mode, where the
+            predictions are calculated for the start and end of the segment
+            that intersects the given date (default: 'normal').
 
     Returns:
         np.ndarray: A 3D numpy.ndarray containing the prediction for each band,
@@ -174,8 +179,7 @@ def get_prediction(date, result_location, image_ds,
         logger.warning('Categorical variable found in design matrix not used'
                        ' in predicted image estimate')
     design = re.sub(r'[\+\-][\ ]+C\(.*\)', '', design)
-    X = patsy.dmatrix(design, {'x': date}).squeeze()
-
+   
     i_coef = []
     for k, v in design_info.iteritems():
         if not re.match('C\(.*\)', k):
@@ -186,18 +190,50 @@ def get_prediction(date, result_location, image_ds,
     raster = np.ones((image_ds.RasterYSize, image_ds.RasterXSize, n_bands),
                      dtype=np.int16) * int(ndv)
 
+    if predict_mode == 'endpoints':
+        raster2 = np.ones((image_ds.RasterYSize, image_ds.RasterXSize, n_bands),
+                     dtype=np.int16) * int(ndv)
+
     logger.debug('Processing results')
+    
     for rec in iter_records(records, warn_on_empty=warn_on_empty):
         for _qa, index in find_indices(rec, date, after=after, before=before):
+            
             if index.shape[0] == 0:
                 continue
-
+            
+            # Get start and ending dates for intersecting segment
+            dates_start = rec['start'].take(index, axis=0)
+            dates_end = rec['end'].take(index, axis=0)
+            X_start = np.array([patsy.dmatrix(design, {'x':date}).squeeze() for date in dates_start])
+            X_end = np.array([patsy.dmatrix(design, {'x':date}).squeeze() for date in dates_end])
+            
             # Calculate prediction
-            _coef = rec['coef'].take(index, axis=0).\
-                take(i_coef, axis=1).take(i_bands, axis=2)
-            raster[rec['py'][index], rec['px'][index], :n_i_bands] = \
-                np.tensordot(_coef, X, axes=(1, 0))
-            if qa:
-                raster[rec['py'][index], rec['px'][index], -1] = _qa
+            if predict_mode == 'endpoints': 
+                _coef = rec['coef'].take(index, axis=0).\
+                    take(i_coef, axis=1).take(i_bands, axis=2)
+                out_coef1 = np.array([np.tensordot(_coef[i], X_start[i], axes=(0,0)) for i in range(0, len(index))])
+                out_coef2 = np.array([np.tensordot(_coef[i], X_end[i], axes=(0,0)) for i in range(0, len(index))])
+                raster[rec['py'][index], rec['px'][index], :n_i_bands] = \
+                   out_coef1
+                raster2[rec['py'][index], rec['px'][index], :n_i_bands] = \
+                   out_coef2
+                if qa:
+                    raster[rec['py'][index], rec['px'][index], -1] = _qa
+                    raster2[rec['py'][index], rec['px'][index], -1] = _qa
+     
 
-    return raster, band_names
+            elif predict_mode == 'normal': 
+                _coef = rec['coef'].take(index, axis=0).\
+                    take(i_coef, axis=1).take(i_bands, axis=2)
+                raster[rec['py'][index], rec['px'][index], :n_i_bands] = \
+                    np.tensordot(_coef, X, axes=(1, 0))
+                if qa:
+                    raster[rec['py'][index], rec['px'][index], -1] = _qa
+    
+    
+    # Merge rasters if we chose the endpoint mode
+    if predict_mode == 'endpoints':
+        raster = np.concatenate((raster, raster2), axis=2)
+
+    return raster_out, band_names

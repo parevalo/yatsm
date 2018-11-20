@@ -50,13 +50,19 @@ logger = logging.getLogger('yatsm')
               help='Export amplitude of sin/cosine pairs instead of '
                    'individual coefficient estimates')
 @click.option('--predict-proba', 'predict_proba', 
-              type=click.Choice(['none', 'max', 'all']),
+              type=click.Choice(['none', 'max', 'all', 'diff']),
               help="Include prediction probability band (scaled by 10,000) "
-                   "for mapped class only ('max') or all classes ('all')")
+                   "for mapped class only ('max'), all classes ('all'), or "
+                   "the two most likely classes, their probabilities and their "
+                   "differences ('diff')")
+@click.option('--predict_mode', default='normal', show_default=True, 
+              help="Calculate prediction coefs with the 'normal' or the "
+                   "'endpoints' mode")
 @click.pass_context
 def map(ctx, map_type, date, output,
         root, result, image, date_frmt, ndv, gdal_frmt, warn_on_empty,
-        band, coef, after, before, qa, refit_prefix, amplitude, predict_proba):
+        band, coef, after, before, qa, refit_prefix, amplitude, predict_proba,
+        predict_mode):
     """
     Map types: coef, predict, class, pheno
 
@@ -108,7 +114,7 @@ def map(ctx, map_type, date, output,
         raster, band_names = get_classification(
             date, result, image_ds,
             after=after, before=before, qa=qa,
-            pred_proba=predict_proba, warn_on_empty=warn_on_empty
+            pred_proba=predict_proba, ndv=ndv, warn_on_empty=warn_on_empty
         )
     elif map_type == 'coef':
         raster, band_names = get_coefficients(
@@ -124,7 +130,7 @@ def map(ctx, map_type, date, output,
             band,
             prefix=refit_prefix,
             after=after, before=before, qa=qa,
-            ndv=ndv, warn_on_empty=warn_on_empty
+            ndv=ndv, warn_on_empty=warn_on_empty, predict_mode=predict_mode
         )
     elif map_type == 'pheno':
         raster, band_names = get_phenology(
